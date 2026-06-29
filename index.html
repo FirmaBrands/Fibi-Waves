@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stripe Scale Animation</title>
+<style>
+  :root{
+    --bg:#1e1e1e; --panel:#2b2b2b; --panel2:#333; --text:#d4d4d4;
+    --accent:#3a8fd6; --line:#444; --hl:#4a4a4a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex; min-height:100vh;
+  }
+  .stage{
+    flex:1; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; padding:24px; gap:18px;
+  }
+  .viewer{
+    background:#000; border:1px solid var(--line); border-radius:4px;
+    box-shadow:0 4px 24px rgba(0,0,0,.5);
+  }
+  svg{display:block}
+  .panel{
+    width:340px; background:var(--panel); border-left:1px solid var(--line);
+    padding:18px; display:flex; flex-direction:column; gap:16px;
+    overflow:auto;
+  }
+  h1{font-size:15px; margin:0 0 4px; font-weight:600; color:#fff}
+  .sub{font-size:11px; color:#888; margin:0}
+  .ctrl{display:flex; flex-direction:column; gap:6px}
+  label{font-size:11px; color:#aaa; display:flex; justify-content:space-between}
+  label b{color:var(--accent); font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%; accent-color:var(--accent)}
+  .row{display:flex; gap:8px}
+  .row>*{flex:1}
+  button{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:4px; padding:9px 10px; cursor:pointer; font-size:12px;
+  }
+  button:hover{background:var(--hl)}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  .hint{font-size:10px; color:#666; line-height:1.5}
+  .expr{
+    background:#1a1a1a; border:1px solid var(--line); border-radius:4px;
+    padding:8px; font-family:"SF Mono",Menlo,Consolas,monospace; font-size:10px;
+    color:#9cdcfe; white-space:pre; overflow:auto;
+  }
+  .seg{display:flex; border:1px solid var(--line); border-radius:4px; overflow:hidden}
+  .seg button{border:0; border-radius:0; flex:1}
+  .seg button.on{background:var(--accent); color:#fff}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="viewer">
+      <svg id="scene" width="640" height="494" viewBox="0 0 640 494"></svg>
+    </div>
+    <div class="row" style="width:640px;gap:10px">
+      <button id="play" class="primary">⏸ Pause</button>
+      <div style="flex:2;display:flex;align-items:center;gap:8px">
+        <input id="scrub" type="range" min="0" max="600" value="0" style="flex:1">
+        <span id="frameLbl" style="font-variant-numeric:tabular-nums;color:#888;min-width:54px;text-align:right">0f</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div>
+      <h1>Stripe Scale Wave</h1>
+      <p class="sub">After Effects expression recreation</p>
+    </div>
+
+    <div class="ctrl">
+      <label>Layers <b id="vLayers">36</b></label>
+      <input id="layers" type="range" min="3" max="40" value="36">
+    </div>
+    <div class="ctrl">
+      <label>Frequency <b id="vFreq">0.45</b></label>
+      <input id="freq" type="range" min="0.1" max="4" step="0.05" value="0.45">
+    </div>
+    <div class="ctrl">
+      <label>Amplitude (%) <b id="vAmp">69</b></label>
+      <input id="amp" type="range" min="0" max="200" value="69">
+    </div>
+    <div class="ctrl">
+      <label>Delay / layer (frames) <b id="vMult">9.0</b></label>
+      <input id="mult" type="range" min="0" max="20" step="0.5" value="9">
+    </div>
+    <div class="ctrl">
+      <label>Base Y scale (%) <b id="vBase">100</b></label>
+      <input id="base" type="range" min="50" max="200" value="100">
+    </div>
+    <div class="ctrl">
+      <label>FPS <b id="vFps">60</b></label>
+      <input id="fps" type="range" min="12" max="60" value="60">
+    </div>
+
+    <div class="expr" id="exprBox"></div>
+
+    <div class="row">
+      <button id="exportFrame">Export current SVG</button>
+    </div>
+    <div class="row">
+      <button id="exportFull">Export animated SVG</button>
+    </div>
+    <p class="hint">“Export current SVG” saves the frame as shown. “Export animated SVG” bakes the wave into a self-animating <code>&lt;svg&gt;</code> using SMIL — open it in any browser.</p>
+  </div>
+
+<script>
+const NS = "http://www.w3.org/2000/svg";
+const scene = document.getElementById("scene");
+
+// Source artwork: one tile of 17 colored stripes, mirrored from the provided SVG.
+const COLORS = {1:"#031035",2:"#043ebf",3:"#fffab8",4:"#f9f353",5:"#ccdaf5"};
+const STRIPE_W = 20.82;
+const TILE_W = 349.29;
+const TILE_H = 269.01;
+// stripe class pattern in document x-order (0..16)
+const PATTERN = [1,2,5,3,4,3,4,5,1,2,1,2,5,3,4,2,1].map(c=>COLORS[c]);
+// Rebuild as ordered stripes 0..16 left→right
+const ORDERED = (()=> {
+  // x positions every STRIPE_W; assign color by reading original placement
+  const map = {};
+  const place = [
+    [0,1],[20.52,2],[41.03,5],[61.55,3],[82.27,4],[102.78,3],[123.3,5],
+    [143.82,2],[164.33,1],[184.85,2],[205.37,5],[225.88,3],[246.4,4],
+    [266.92,3],[287.43,5],[307.96,2],[328.47,1]
+  ];
+  place.forEach(([x,c])=>{ map[Math.round(x/STRIPE_W)] = COLORS[c]; });
+  return Object.keys(map).sort((a,b)=>a-b).map(k=>map[k]);
+})();
+
+// State
+const S = {
+  layers:36, freq:0.45, amp:69, mult:9, base:100, fps:60,
+  frame:0, playing:true, lastT:0
+};
+const DUR_FRAMES = 600; // scrub length
+
+const els = {};
+["layers","freq","amp","mult","base","fps"].forEach(id=>{
+  els[id]=document.getElementById(id);
+  els[id].addEventListener("input",()=>{ readControls(); rebuild(); });
+});
+function readControls(){
+  S.layers=+els.layers.value; S.freq=+els.freq.value; S.amp=+els.amp.value;
+  S.mult=+els.mult.value; S.base=+els.base.value; S.fps=+els.fps.value;
+  document.getElementById("vLayers").textContent=S.layers;
+  document.getElementById("vFreq").textContent=S.freq.toFixed(2);
+  document.getElementById("vAmp").textContent=S.amp;
+  document.getElementById("vMult").textContent=S.mult.toFixed(1);
+  document.getElementById("vBase").textContent=S.base;
+  document.getElementById("vFps").textContent=S.fps;
+  updateExpr();
+}
+function updateExpr(){
+  document.getElementById("exprBox").textContent =
+`// Master (Design 11)
+freq = ${S.freq};
+amp  = ${S.amp};
+v = Math.sin(time * Math.PI * freq) * amp;
+value + [0, v]
+
+// Followers
+scale.valueAtTime(
+  time - framesToTime(index * Mult.Slider)
+)  // Slider = ${S.mult.toFixed(1)}`;
+}
+
+// Geometry: stripes drawn around a vertical center, scaled in Y per the wave.
+const VIEW_W = 640, VIEW_H = 494;
+const CX = VIEW_W/2, CY = VIEW_H/2;
+const COL_W = 13;                 // on-screen stripe width
+const BASE_H = 150;               // unscaled stripe height (px)
+
+// Master vertical-scale value (in %) for a given frame, mimicking AE:
+// value 100% + sin wave that pushes height. We map amp% to a height factor.
+function masterScaleAt(frame){
+  const t = frame / S.fps;
+  const v = Math.sin(t * Math.PI * S.freq) * S.amp; // -amp..+amp
+  return S.base + v;  // percent
+}
+function layerScaleAt(layerIdx, frame){
+  // follower samples master at (time - layerIdx*mult frames)
+  const f = frame - layerIdx * S.mult;
+  return masterScaleAt(f);
+}
+
+let rects = [];
+function rebuild(){
+  while(scene.firstChild) scene.removeChild(scene.firstChild);
+  rects = [];
+  const n = S.layers;
+  const totalW = n * COL_W;
+  const startX = CX - totalW/2;
+  for(let i=0;i<n;i++){
+    const r = document.createElementNS(NS,"rect");
+    r.setAttribute("x",(startX + i*COL_W).toFixed(2));
+    r.setAttribute("width",COL_W+0.5); // slight overlap to avoid seams
+    r.setAttribute("fill", ORDERED[i % ORDERED.length]);
+    scene.appendChild(r);
+    rects.push(r);
+  }
+  draw();
+}
+function draw(){
+  const n = rects.length;
+  for(let i=0;i<n;i++){
+    const sc = layerScaleAt(i, S.frame) / 100;
+    const h = Math.max(0, BASE_H * sc);
+    const y = CY - h/2;
+    rects[i].setAttribute("y", y.toFixed(2));
+    rects[i].setAttribute("height", h.toFixed(2));
+  }
+  const lbl = Math.floor(S.frame);
+  document.getElementById("frameLbl").textContent = lbl + "f";
+  document.getElementById("scrub").value = ((S.frame % DUR_FRAMES)+DUR_FRAMES)%DUR_FRAMES;
+}
+
+// Playback
+const playBtn = document.getElementById("play");
+playBtn.addEventListener("click",()=>{
+  S.playing=!S.playing;
+  playBtn.textContent = S.playing ? "⏸ Pause" : "▶ Play";
+  if(S.playing) S.lastT=performance.now();
+});
+document.getElementById("scrub").addEventListener("input",e=>{
+  S.frame=+e.target.value; S.playing=false; playBtn.textContent="▶ Play"; draw();
+});
+
+function loop(t){
+  if(S.playing){
+    if(!S.lastT) S.lastT=t;
+    const dt=(t-S.lastT)/1000;
+    S.lastT=t;
+    S.frame += dt * S.fps;
+    if(S.frame > DUR_FRAMES) S.frame -= DUR_FRAMES;
+    draw();
+  }
+  requestAnimationFrame(loop);
+}
+
+// ---------- Export: current static SVG ----------
+function svgHeader(w,h){
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${NS}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
+}
+function exportCurrent(){
+  const n = rects.length;
+  let body = `<rect width="${VIEW_W}" height="${VIEW_H}" fill="#000"/>\n`;
+  for(let i=0;i<n;i++){
+    const sc = layerScaleAt(i,S.frame)/100;
+    const h = Math.max(0,BASE_H*sc);
+    const y = CY - h/2;
+    const x = rects[i].getAttribute("x");
+    body += `<rect x="${x}" y="${y.toFixed(2)}" width="${COL_W+0.5}" height="${h.toFixed(2)}" fill="${ORDERED[i%ORDERED.length]}"/>\n`;
+  }
+  download(`${svgHeader(VIEW_W,VIEW_H)}\n${body}</svg>`,"stripe_frame.svg");
+}
+
+// ---------- Export: animated SVG (SMIL) ----------
+function exportAnimated(){
+  const n = rects.length;
+  const period = 2 / S.freq;            // seconds for one sine cycle (sin(t*PI*freq))
+  // We sample one full cycle so the loop is seamless.
+  const SAMPLES = 60;
+  const dur = period.toFixed(3);
+  let body = `<rect width="${VIEW_W}" height="${VIEW_H}" fill="#000"/>\n`;
+
+  for(let i=0;i<n;i++){
+    const x = rects[i].getAttribute("x");
+    const fill = ORDERED[i % ORDERED.length];
+    const hVals=[], yVals=[];
+    for(let s=0;s<=SAMPLES;s++){
+      const frac=s/SAMPLES;
+      // map sample fraction to a frame within one period, including this layer's delay
+      const frame = frac*period*S.fps;
+      const sc = layerScaleAt(i, frame)/100;
+      const h = Math.max(0,BASE_H*sc);
+      hVals.push(h.toFixed(2));
+      yVals.push((CY-h/2).toFixed(2));
+    }
+    body +=
+`<rect x="${x}" width="${COL_W+0.5}" fill="${fill}">
+  <animate attributeName="height" dur="${dur}s" repeatCount="indefinite" calcMode="spline" values="${hVals.join(';')}"/>
+  <animate attributeName="y" dur="${dur}s" repeatCount="indefinite" calcMode="spline" values="${yVals.join(';')}"/>
+</rect>\n`;
+  }
+  download(`${svgHeader(VIEW_W,VIEW_H)}\n${body}</svg>`,"stripe_animation.svg");
+}
+
+function download(text,name){
+  const blob=new Blob([text],{type:"image/svg+xml"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+document.getElementById("exportFrame").addEventListener("click",exportCurrent);
+document.getElementById("exportFull").addEventListener("click",exportAnimated);
+
+// init
+readControls(); rebuild(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>
