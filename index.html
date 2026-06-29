@@ -3,308 +3,433 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stripe Scale Animation</title>
+<title>Wave Studio — Stripe Scale Animation</title>
 <style>
   :root{
-    --bg:#1e1e1e; --panel:#2b2b2b; --panel2:#333; --text:#d4d4d4;
-    --accent:#3a8fd6; --line:#444; --hl:#4a4a4a;
+    --bg:#f6f7f9;
+    --surface:#ffffff;
+    --ink:#1a1d21;
+    --ink-soft:#5a6068;
+    --ink-faint:#9aa0a8;
+    --line:#e6e8ec;
+    --line-strong:#d4d8de;
+    --accent:#2f6df0;
+    --accent-soft:#eaf1fe;
+    --field:#f0f2f5;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
   }
   *{box-sizing:border-box}
+  html,body{height:100%}
   body{
-    margin:0; background:var(--bg); color:var(--text);
-    font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    display:flex; min-height:100vh;
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.5 var(--sans);
+    display:grid; grid-template-columns:1fr 360px; min-height:100vh;
+    -webkit-font-smoothing:antialiased;
   }
+
+  /* ---------- Stage ---------- */
   .stage{
-    flex:1; display:flex; flex-direction:column; align-items:center;
-    justify-content:center; padding:24px; gap:18px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:40px; gap:24px;
   }
-  .viewer{
-    background:#000; border:1px solid var(--line); border-radius:4px;
-    box-shadow:0 4px 24px rgba(0,0,0,.5);
+  .canvas-wrap{
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:14px; padding:20px; box-shadow:var(--shadow);
   }
-  svg{display:block}
+  .canvas-inner{
+    border-radius:8px; overflow:hidden; line-height:0;
+  }
+  svg#scene{display:block}
+
+  /* transport */
+  .transport{
+    width:560px; max-width:100%; display:flex; align-items:center; gap:14px;
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:var(--radius); padding:10px 14px; box-shadow:var(--shadow);
+  }
+  .play-btn{
+    width:38px; height:38px; flex:0 0 auto; border-radius:9px;
+    border:1px solid var(--accent); background:var(--accent); color:#fff;
+    display:grid; place-items:center; cursor:pointer; transition:filter .12s;
+  }
+  .play-btn:hover{filter:brightness(1.06)}
+  .play-btn svg{width:15px;height:15px;display:block}
+  .scrub{flex:1; display:flex; align-items:center}
+  input[type=range].timeline{width:100%}
+  .time{
+    font:12px/1 var(--mono); color:var(--ink-soft); min-width:46px;
+    text-align:right; font-variant-numeric:tabular-nums;
+  }
+
+  /* ---------- Panel ---------- */
   .panel{
-    width:340px; background:var(--panel); border-left:1px solid var(--line);
-    padding:18px; display:flex; flex-direction:column; gap:16px;
-    overflow:auto;
+    background:var(--surface); border-left:1px solid var(--line);
+    display:flex; flex-direction:column; overflow-y:auto;
   }
-  h1{font-size:15px; margin:0 0 4px; font-weight:600; color:#fff}
-  .sub{font-size:11px; color:#888; margin:0}
-  .ctrl{display:flex; flex-direction:column; gap:6px}
-  label{font-size:11px; color:#aaa; display:flex; justify-content:space-between}
-  label b{color:var(--accent); font-variant-numeric:tabular-nums}
-  input[type=range]{width:100%; accent-color:var(--accent)}
-  .row{display:flex; gap:8px}
-  .row>*{flex:1}
-  button{
-    background:var(--panel2); color:var(--text); border:1px solid var(--line);
-    border-radius:4px; padding:9px 10px; cursor:pointer; font-size:12px;
+  .panel-head{
+    padding:22px 22px 18px; border-bottom:1px solid var(--line);
   }
-  button:hover{background:var(--hl)}
-  button.primary{background:var(--accent); border-color:var(--accent); color:#fff}
-  button.primary:hover{filter:brightness(1.1)}
-  .hint{font-size:10px; color:#666; line-height:1.5}
-  .expr{
-    background:#1a1a1a; border:1px solid var(--line); border-radius:4px;
-    padding:8px; font-family:"SF Mono",Menlo,Consolas,monospace; font-size:10px;
-    color:#9cdcfe; white-space:pre; overflow:auto;
+  .panel-head h1{font-size:16px; margin:0; font-weight:650; letter-spacing:-.01em}
+  .panel-head p{font-size:12px; color:var(--ink-faint); margin:3px 0 0}
+
+  .group{padding:18px 22px; border-bottom:1px solid var(--line)}
+  .group-title{
+    font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--ink-faint); margin:0 0 14px;
   }
-  .seg{display:flex; border:1px solid var(--line); border-radius:4px; overflow:hidden}
-  .seg button{border:0; border-radius:0; flex:1}
-  .seg button.on{background:var(--accent); color:#fff}
+
+  .control{margin-bottom:16px}
+  .control:last-child{margin-bottom:0}
+  .control-row{
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px;
+  }
+  .control-row label{font-size:13px; color:var(--ink); font-weight:500}
+  .value{
+    font:12px/1 var(--mono); color:var(--accent); font-variant-numeric:tabular-nums;
+    background:var(--accent-soft); padding:3px 7px; border-radius:6px;
+  }
+  .desc{font-size:11px; color:var(--ink-faint); margin:6px 0 0; line-height:1.4}
+
+  /* range slider, unified light style */
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%;
+    height:4px; border-radius:4px; background:var(--line-strong);
+    outline:none; cursor:pointer; margin:4px 0;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none; width:16px; height:16px;
+    border-radius:50%; background:var(--surface); border:2px solid var(--accent);
+    box-shadow:0 1px 3px rgba(16,24,40,.18); transition:transform .1s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.12)}
+  input[type=range]::-moz-range-thumb{
+    width:16px; height:16px; border-radius:50%; background:var(--surface);
+    border:2px solid var(--accent); box-shadow:0 1px 3px rgba(16,24,40,.18);
+  }
+  input[type=range].timeline::-webkit-slider-thumb{width:14px;height:14px}
+
+  /* buttons */
+  .actions{padding:18px 22px; display:flex; flex-direction:column; gap:10px}
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    border-radius:9px; padding:11px 14px; cursor:pointer; font-size:13px;
+    font-weight:550; font-family:var(--sans); transition:background .12s,border-color .12s;
+    border:1px solid var(--line-strong); background:var(--surface); color:var(--ink);
+  }
+  .btn:hover{background:var(--field)}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  .btn.primary:hover{filter:brightness(1.06); background:var(--accent)}
+  .btn svg{width:15px; height:15px}
+  .btn-note{font-size:11px; color:var(--ink-faint); line-height:1.5; margin:2px 0 0}
+
+  /* color swatches */
+  .swatches{display:flex; flex-wrap:wrap; gap:10px}
+  .swatch{
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    font-size:11px; color:var(--ink-soft);
+  }
+  .swatch input[type=color]{
+    -webkit-appearance:none; appearance:none; width:44px; height:44px;
+    border:1px solid var(--line-strong); border-radius:9px; padding:0;
+    cursor:pointer; background:none; transition:transform .1s, box-shadow .12s;
+  }
+  .swatch input[type=color]:hover{transform:scale(1.05); box-shadow:0 2px 8px rgba(16,24,40,.12)}
+  .swatch input[type=color]::-webkit-color-swatch-wrapper{padding:3px}
+  .swatch input[type=color]::-webkit-color-swatch{border:none; border-radius:7px}
+  .swatch input[type=color]::-moz-color-swatch{border:none; border-radius:7px}
+  .reset-link{
+    background:none; border:none; padding:6px 0 0; cursor:pointer;
+    font-size:12px; color:var(--accent); font-family:var(--sans); align-self:flex-start;
+  }
+  .reset-link:hover{text-decoration:underline}
+
+  /* toast */
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:10px;
+    font-size:13px; opacity:0; pointer-events:none; transition:.25s; box-shadow:var(--shadow);
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  @media (max-width:860px){
+    body{grid-template-columns:1fr; min-height:auto}
+    .panel{border-left:0; border-top:1px solid var(--line)}
+    .stage{padding:24px}
+    .canvas-inner svg{max-width:100%; height:auto}
+  }
 </style>
 </head>
 <body>
-  <div class="stage">
-    <div class="viewer">
-      <svg id="scene" width="640" height="494" viewBox="0 0 640 494"></svg>
-    </div>
-    <div class="row" style="width:640px;gap:10px">
-      <button id="play" class="primary">⏸ Pause</button>
-      <div style="flex:2;display:flex;align-items:center;gap:8px">
-        <input id="scrub" type="range" min="0" max="600" value="0" style="flex:1">
-        <span id="frameLbl" style="font-variant-numeric:tabular-nums;color:#888;min-width:54px;text-align:right">0f</span>
+  <main class="stage">
+    <div class="canvas-wrap">
+      <div class="canvas-inner">
+        <svg id="scene" width="600" height="420" viewBox="0 0 600 420"></svg>
       </div>
     </div>
-  </div>
 
-  <div class="panel">
-    <div>
-      <h1>Stripe Scale Wave</h1>
-      <p class="sub">After Effects expression recreation</p>
+    <div class="transport">
+      <button id="play" class="play-btn" aria-label="Pause">
+        <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      </button>
+      <div class="scrub"><input id="scrub" class="timeline" type="range" min="0" max="600" value="0"></div>
+      <span id="timeLbl" class="time">0f</span>
     </div>
+  </main>
 
-    <div class="ctrl">
-      <label>Layers <b id="vLayers">36</b></label>
-      <input id="layers" type="range" min="3" max="40" value="36">
-    </div>
-    <div class="ctrl">
-      <label>Frequency <b id="vFreq">0.45</b></label>
-      <input id="freq" type="range" min="0.1" max="4" step="0.05" value="0.45">
-    </div>
-    <div class="ctrl">
-      <label>Amplitude (%) <b id="vAmp">69</b></label>
-      <input id="amp" type="range" min="0" max="200" value="69">
-    </div>
-    <div class="ctrl">
-      <label>Delay / layer (frames) <b id="vMult">9.0</b></label>
-      <input id="mult" type="range" min="0" max="20" step="0.5" value="9">
-    </div>
-    <div class="ctrl">
-      <label>Base Y scale (%) <b id="vBase">100</b></label>
-      <input id="base" type="range" min="50" max="200" value="100">
-    </div>
-    <div class="ctrl">
-      <label>FPS <b id="vFps">60</b></label>
-      <input id="fps" type="range" min="12" max="60" value="60">
+  <aside class="panel">
+    <div class="panel-head">
+      <h1>Wave Studio</h1>
+      <p>Stripe scale animation</p>
     </div>
 
-    <div class="expr" id="exprBox"></div>
+    <section class="group">
+      <p class="group-title">Wave shape</p>
 
-    <div class="row">
-      <button id="exportFrame">Export current SVG</button>
+      <div class="control">
+        <div class="control-row"><label for="freq">Speed</label><span id="vFreq" class="value">0.45</span></div>
+        <input id="freq" type="range" min="0.1" max="4" step="0.05" value="0.45">
+        <p class="desc">How fast the wave cycles.</p>
+      </div>
+
+      <div class="control">
+        <div class="control-row"><label for="amp">Height</label><span id="vAmp" class="value">69%</span></div>
+        <input id="amp" type="range" min="0" max="200" value="69">
+        <p class="desc">How tall the stripes stretch at the peak.</p>
+      </div>
+
+      <div class="control">
+        <div class="control-row"><label for="mult">Stagger</label><span id="vMult" class="value">9.0f</span></div>
+        <input id="mult" type="range" min="0" max="20" step="0.5" value="9">
+        <p class="desc">Delay between each stripe — higher means more ripple.</p>
+      </div>
+    </section>
+
+    <section class="group">
+      <p class="group-title">Stripes</p>
+
+      <div class="control">
+        <div class="control-row"><label for="layers">Count</label><span id="vLayers" class="value">36</span></div>
+        <input id="layers" type="range" min="3" max="40" value="36">
+      </div>
+
+      <div class="control">
+        <div class="control-row"><label for="base">Resting height</label><span id="vBase" class="value">100%</span></div>
+        <input id="base" type="range" min="50" max="200" value="100">
+        <p class="desc">Stripe height when the wave is flat.</p>
+      </div>
+    </section>
+
+    <section class="group">
+      <p class="group-title">Colors</p>
+      <div class="swatches" id="swatches">
+        <label class="swatch">Background
+          <input type="color" id="cBg" value="#0e1116" data-key="bg">
+        </label>
+        <label class="swatch">Color 1
+          <input type="color" id="c0" value="#031035" data-key="0">
+        </label>
+        <label class="swatch">Color 2
+          <input type="color" id="c1" value="#043ebf" data-key="1">
+        </label>
+        <label class="swatch">Color 3
+          <input type="color" id="c2" value="#ccdaf5" data-key="2">
+        </label>
+        <label class="swatch">Color 4
+          <input type="color" id="c3" value="#fffab8" data-key="3">
+        </label>
+        <label class="swatch">Color 5
+          <input type="color" id="c4" value="#f9f353" data-key="4">
+        </label>
+      </div>
+      <button id="resetColors" class="reset-link">Reset colors</button>
+    </section>
+
+    <div class="actions">
+      <button id="exportFrame" class="btn primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+        Export this frame
+      </button>
+      <button id="exportFull" class="btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export animated SVG
+      </button>
+      <p class="btn-note">Frame export saves a still of the current pose. The animated file loops on its own in any browser.</p>
     </div>
-    <div class="row">
-      <button id="exportFull">Export animated SVG</button>
-    </div>
-    <p class="hint">“Export current SVG” saves the frame as shown. “Export animated SVG” bakes the wave into a self-animating <code>&lt;svg&gt;</code> using SMIL — open it in any browser.</p>
-  </div>
+  </aside>
+
+  <div id="toast" class="toast"></div>
 
 <script>
 const NS = "http://www.w3.org/2000/svg";
 const scene = document.getElementById("scene");
 
-// Source artwork: one tile of 17 colored stripes, mirrored from the provided SVG.
-const COLORS = {1:"#031035",2:"#043ebf",3:"#fffab8",4:"#f9f353",5:"#ccdaf5"};
-const STRIPE_W = 20.82;
-const TILE_W = 349.29;
-const TILE_H = 269.01;
-// stripe class pattern in document x-order (0..16)
-const PATTERN = [1,2,5,3,4,3,4,5,1,2,1,2,5,3,4,2,1].map(c=>COLORS[c]);
-// Rebuild as ordered stripes 0..16 left→right
-const ORDERED = (()=> {
-  // x positions every STRIPE_W; assign color by reading original placement
-  const map = {};
-  const place = [
-    [0,1],[20.52,2],[41.03,5],[61.55,3],[82.27,4],[102.78,3],[123.3,5],
-    [143.82,2],[164.33,1],[184.85,2],[205.37,5],[225.88,3],[246.4,4],
-    [266.92,3],[287.43,5],[307.96,2],[328.47,1]
-  ];
-  place.forEach(([x,c])=>{ map[Math.round(x/STRIPE_W)] = COLORS[c]; });
-  return Object.keys(map).sort((a,b)=>a-b).map(k=>map[k]);
-})();
+// Editable palette. PALETTE indices 0–4 are the five stripe colors; bg is the canvas.
+const DEFAULT_PALETTE = ["#031035","#043ebf","#ccdaf5","#fffab8","#f9f353"];
+const DEFAULT_BG = "#0e1116";
+let PALETTE = [...DEFAULT_PALETTE];
+let BG = DEFAULT_BG;
 
-// State
-const S = {
-  layers:36, freq:0.45, amp:69, mult:9, base:100, fps:60,
-  frame:0, playing:true, lastT:0
-};
-const DUR_FRAMES = 600; // scrub length
+// Stripe order (left→right) as indices into PALETTE — preserves the original rhythm.
+const PATTERN = [0,1,2,3,4,3,2,1,0,1,2,3,4,3,2,1,0];
+const colorAt = i => PALETTE[PATTERN[i % PATTERN.length]];
+
+const S = { layers:36, freq:0.45, amp:69, mult:9, base:100, fps:60, frame:0, playing:true, lastT:0 };
+const DUR_FRAMES = 600;
+
+const VIEW_W = 600, VIEW_H = 420;
+const CX = VIEW_W/2, CY = VIEW_H/2;
+const COL_W = 12;
+const BASE_H = 130;
 
 const els = {};
-["layers","freq","amp","mult","base","fps"].forEach(id=>{
-  els[id]=document.getElementById(id);
-  els[id].addEventListener("input",()=>{ readControls(); rebuild(); });
+[["layers","vLayers",v=>v],
+ ["freq","vFreq",v=>(+v).toFixed(2)],
+ ["amp","vAmp",v=>v+"%"],
+ ["mult","vMult",v=>(+v).toFixed(1)+"f"],
+ ["base","vBase",v=>v+"%"]
+].forEach(([id,lbl,fmt])=>{
+  els[id]={input:document.getElementById(id),lbl:document.getElementById(lbl),fmt};
+  els[id].input.addEventListener("input",()=>{ readControls(); rebuild(); });
 });
+
 function readControls(){
-  S.layers=+els.layers.value; S.freq=+els.freq.value; S.amp=+els.amp.value;
-  S.mult=+els.mult.value; S.base=+els.base.value; S.fps=+els.fps.value;
-  document.getElementById("vLayers").textContent=S.layers;
-  document.getElementById("vFreq").textContent=S.freq.toFixed(2);
-  document.getElementById("vAmp").textContent=S.amp;
-  document.getElementById("vMult").textContent=S.mult.toFixed(1);
-  document.getElementById("vBase").textContent=S.base;
-  document.getElementById("vFps").textContent=S.fps;
-  updateExpr();
-}
-function updateExpr(){
-  document.getElementById("exprBox").textContent =
-`// Master (Design 11)
-freq = ${S.freq};
-amp  = ${S.amp};
-v = Math.sin(time * Math.PI * freq) * amp;
-value + [0, v]
-
-// Followers
-scale.valueAtTime(
-  time - framesToTime(index * Mult.Slider)
-)  // Slider = ${S.mult.toFixed(1)}`;
+  S.layers=+els.layers.input.value; S.freq=+els.freq.input.value; S.amp=+els.amp.input.value;
+  S.mult=+els.mult.input.value; S.base=+els.base.input.value;
+  for(const k in els){ els[k].lbl.textContent = els[k].fmt(els[k].input.value); }
 }
 
-// Geometry: stripes drawn around a vertical center, scaled in Y per the wave.
-const VIEW_W = 640, VIEW_H = 494;
-const CX = VIEW_W/2, CY = VIEW_H/2;
-const COL_W = 13;                 // on-screen stripe width
-const BASE_H = 150;               // unscaled stripe height (px)
+// ---------- Color pickers ----------
+const canvasInner = document.querySelector(".canvas-inner");
+function applyBg(){ canvasInner.style.background = BG; }
 
-// Master vertical-scale value (in %) for a given frame, mimicking AE:
-// value 100% + sin wave that pushes height. We map amp% to a height factor.
+document.querySelectorAll('#swatches input[type=color]').forEach(inp=>{
+  inp.addEventListener("input",()=>{
+    const key = inp.dataset.key;
+    if(key === "bg"){ BG = inp.value; applyBg(); }
+    else { PALETTE[+key] = inp.value; recolor(); }
+  });
+});
+document.getElementById("resetColors").addEventListener("click",()=>{
+  PALETTE = [...DEFAULT_PALETTE]; BG = DEFAULT_BG;
+  document.getElementById("cBg").value = BG;
+  DEFAULT_PALETTE.forEach((c,i)=>{ document.getElementById("c"+i).value = c; });
+  applyBg(); recolor();
+});
+function recolor(){
+  for(let i=0;i<rects.length;i++) rects[i].setAttribute("fill", colorAt(i));
+}
+
 function masterScaleAt(frame){
   const t = frame / S.fps;
-  const v = Math.sin(t * Math.PI * S.freq) * S.amp; // -amp..+amp
-  return S.base + v;  // percent
+  const v = Math.sin(t * Math.PI * S.freq) * S.amp;
+  return S.base + v;
 }
-function layerScaleAt(layerIdx, frame){
-  // follower samples master at (time - layerIdx*mult frames)
-  const f = frame - layerIdx * S.mult;
-  return masterScaleAt(f);
-}
+function layerScaleAt(i, frame){ return masterScaleAt(frame - i * S.mult); }
 
 let rects = [];
 function rebuild(){
   while(scene.firstChild) scene.removeChild(scene.firstChild);
   rects = [];
   const n = S.layers;
-  const totalW = n * COL_W;
-  const startX = CX - totalW/2;
+  const startX = CX - (n*COL_W)/2;
   for(let i=0;i<n;i++){
     const r = document.createElementNS(NS,"rect");
     r.setAttribute("x",(startX + i*COL_W).toFixed(2));
-    r.setAttribute("width",COL_W+0.5); // slight overlap to avoid seams
-    r.setAttribute("fill", ORDERED[i % ORDERED.length]);
+    r.setAttribute("width",COL_W+0.5);
+    r.setAttribute("fill", colorAt(i));
     scene.appendChild(r);
     rects.push(r);
   }
   draw();
 }
 function draw(){
-  const n = rects.length;
-  for(let i=0;i<n;i++){
-    const sc = layerScaleAt(i, S.frame) / 100;
-    const h = Math.max(0, BASE_H * sc);
-    const y = CY - h/2;
-    rects[i].setAttribute("y", y.toFixed(2));
-    rects[i].setAttribute("height", h.toFixed(2));
+  for(let i=0;i<rects.length;i++){
+    const h = Math.max(0, BASE_H * layerScaleAt(i,S.frame)/100);
+    rects[i].setAttribute("y",(CY-h/2).toFixed(2));
+    rects[i].setAttribute("height",h.toFixed(2));
   }
-  const lbl = Math.floor(S.frame);
-  document.getElementById("frameLbl").textContent = lbl + "f";
+  document.getElementById("timeLbl").textContent = Math.floor(S.frame)+"f";
   document.getElementById("scrub").value = ((S.frame % DUR_FRAMES)+DUR_FRAMES)%DUR_FRAMES;
 }
 
-// Playback
 const playBtn = document.getElementById("play");
-playBtn.addEventListener("click",()=>{
-  S.playing=!S.playing;
-  playBtn.textContent = S.playing ? "⏸ Pause" : "▶ Play";
-  if(S.playing) S.lastT=performance.now();
-});
+const playIcon = document.getElementById("playIcon");
+const ICON_PAUSE = '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+const ICON_PLAY  = '<path d="M7 5v14l12-7z"/>';
+function setPlaying(p){
+  S.playing=p;
+  playIcon.innerHTML = p ? ICON_PAUSE : ICON_PLAY;
+  playBtn.setAttribute("aria-label", p ? "Pause" : "Play");
+  if(p) S.lastT=performance.now();
+}
+playBtn.addEventListener("click",()=>setPlaying(!S.playing));
 document.getElementById("scrub").addEventListener("input",e=>{
-  S.frame=+e.target.value; S.playing=false; playBtn.textContent="▶ Play"; draw();
+  S.frame=+e.target.value; setPlaying(false); draw();
 });
 
 function loop(t){
   if(S.playing){
     if(!S.lastT) S.lastT=t;
-    const dt=(t-S.lastT)/1000;
+    S.frame += (t-S.lastT)/1000 * S.fps;
     S.lastT=t;
-    S.frame += dt * S.fps;
     if(S.frame > DUR_FRAMES) S.frame -= DUR_FRAMES;
     draw();
   }
   requestAnimationFrame(loop);
 }
 
-// ---------- Export: current static SVG ----------
+// ---------- Export ----------
 function svgHeader(w,h){
   return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${NS}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
 }
 function exportCurrent(){
-  const n = rects.length;
-  let body = `<rect width="${VIEW_W}" height="${VIEW_H}" fill="#000"/>\n`;
-  for(let i=0;i<n;i++){
-    const sc = layerScaleAt(i,S.frame)/100;
-    const h = Math.max(0,BASE_H*sc);
-    const y = CY - h/2;
-    const x = rects[i].getAttribute("x");
-    body += `<rect x="${x}" y="${y.toFixed(2)}" width="${COL_W+0.5}" height="${h.toFixed(2)}" fill="${ORDERED[i%ORDERED.length]}"/>\n`;
+  let body = `<rect width="${VIEW_W}" height="${VIEW_H}" fill="${BG}"/>\n`;
+  for(let i=0;i<rects.length;i++){
+    const h = Math.max(0,BASE_H*layerScaleAt(i,S.frame)/100);
+    body += `<rect x="${rects[i].getAttribute("x")}" y="${(CY-h/2).toFixed(2)}" width="${COL_W+0.5}" height="${h.toFixed(2)}" fill="${colorAt(i)}"/>\n`;
   }
-  download(`${svgHeader(VIEW_W,VIEW_H)}\n${body}</svg>`,"stripe_frame.svg");
+  download(`${svgHeader(VIEW_W,VIEW_H)}\n${body}</svg>`,"wave_frame.svg");
+  toast("Frame exported");
 }
-
-// ---------- Export: animated SVG (SMIL) ----------
 function exportAnimated(){
-  const n = rects.length;
-  const period = 2 / S.freq;            // seconds for one sine cycle (sin(t*PI*freq))
-  // We sample one full cycle so the loop is seamless.
-  const SAMPLES = 60;
-  const dur = period.toFixed(3);
-  let body = `<rect width="${VIEW_W}" height="${VIEW_H}" fill="#000"/>\n`;
-
-  for(let i=0;i<n;i++){
-    const x = rects[i].getAttribute("x");
-    const fill = ORDERED[i % ORDERED.length];
+  const period = 2 / S.freq;
+  const SAMPLES = 60, dur = period.toFixed(3);
+  let body = `<rect width="${VIEW_W}" height="${VIEW_H}" fill="${BG}"/>\n`;
+  for(let i=0;i<rects.length;i++){
     const hVals=[], yVals=[];
     for(let s=0;s<=SAMPLES;s++){
-      const frac=s/SAMPLES;
-      // map sample fraction to a frame within one period, including this layer's delay
-      const frame = frac*period*S.fps;
-      const sc = layerScaleAt(i, frame)/100;
-      const h = Math.max(0,BASE_H*sc);
-      hVals.push(h.toFixed(2));
-      yVals.push((CY-h/2).toFixed(2));
+      const h = Math.max(0,BASE_H*layerScaleAt(i,(s/SAMPLES)*period*S.fps)/100);
+      hVals.push(h.toFixed(2)); yVals.push((CY-h/2).toFixed(2));
     }
     body +=
-`<rect x="${x}" width="${COL_W+0.5}" fill="${fill}">
-  <animate attributeName="height" dur="${dur}s" repeatCount="indefinite" calcMode="spline" values="${hVals.join(';')}"/>
-  <animate attributeName="y" dur="${dur}s" repeatCount="indefinite" calcMode="spline" values="${yVals.join(';')}"/>
+`<rect x="${rects[i].getAttribute("x")}" width="${COL_W+0.5}" fill="${colorAt(i)}">
+  <animate attributeName="height" dur="${dur}s" repeatCount="indefinite" values="${hVals.join(';')}"/>
+  <animate attributeName="y" dur="${dur}s" repeatCount="indefinite" values="${yVals.join(';')}"/>
 </rect>\n`;
   }
-  download(`${svgHeader(VIEW_W,VIEW_H)}\n${body}</svg>`,"stripe_animation.svg");
+  download(`${svgHeader(VIEW_W,VIEW_H)}\n${body}</svg>`,"wave_animation.svg");
+  toast("Animation exported");
 }
-
 function download(text,name){
-  const blob=new Blob([text],{type:"image/svg+xml"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url; a.download=name; a.click();
+  const url=URL.createObjectURL(new Blob([text],{type:"image/svg+xml"}));
+  const a=document.createElement("a"); a.href=url; a.download=name; a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+
+let toastT;
+function toast(msg){
+  const el=document.getElementById("toast");
+  el.textContent=msg; el.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("show"),1800);
+}
+
 document.getElementById("exportFrame").addEventListener("click",exportCurrent);
 document.getElementById("exportFull").addEventListener("click",exportAnimated);
 
-// init
-readControls(); rebuild(); requestAnimationFrame(loop);
+readControls(); applyBg(); rebuild(); setPlaying(true); requestAnimationFrame(loop);
 </script>
 </body>
 </html>
